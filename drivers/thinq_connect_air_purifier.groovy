@@ -1,6 +1,11 @@
 /**
  *  ThinQ Connect Air Purifier
- *  jonozzz hubitat-thinqconnect 프레임워크 기반 (thinq_connect_core.groovy 연동)
+ *  Based on jonozzz hubitat-thinqconnect framework
+ *
+ *  Changes:
+ *  - pm1 → pm1_0 / pm25 → pm2_5 (aligned with PM1.0, PM2.5 naming)
+ *  - Added odor, totalPollution, humidity sensors
+ *  - Handles LG API typo: "oder" instead of "odor"
  */
 
 import groovy.transform.Field
@@ -13,29 +18,37 @@ metadata {
     definition(name: "ThinQ Connect Air Purifier", namespace: "jonozzz", author: "Custom") {
         capability "Sensor"
         capability "Switch"
-        capability "Initialize"   // ★ master 장치 판별에 필수 (없으면 MQTT 연결 안 됨)
+        capability "Initialize"
         capability "Refresh"
         capability "FanControl"
 
         attribute "currentState",        "string"
         attribute "airPurifierMode",     "string"
         attribute "airFlowSpeed",        "string"
-        attribute "pm1",                 "number"
-        attribute "pm25",                "number"
-        attribute "pm10",                "number"
-        attribute "pm1Level",            "string"
-        attribute "pm25Level",           "string"
+
+        // ── Air Quality Sensors ───────────────────────────────
+        attribute "pm1_0",               "number"   // PM1.0  (API key: PM1)
+        attribute "pm2_5",               "number"   // PM2.5  (API key: PM2)
+        attribute "pm10",                "number"   // PM10   (API key: PM10)
+        attribute "pm1_0Level",          "string"
+        attribute "pm2_5Level",          "string"
         attribute "pm10Level",           "string"
-        attribute "filterRemainPercent", "number"   // ★ 기존에 누락된 attribute
+
+        attribute "odor",                "number"   // Odor level (API key: "oder" - LG typo)
+        attribute "totalPollution",      "number"   // Total pollution index
+        attribute "humidity",            "number"   // Humidity
+
+        attribute "filterRemainPercent", "number"
+        attribute "connectionStatus",    "string"
     }
 
     preferences {
-        input name: "logLevel",     title: "Log Level",            type: "enum",  options: LOG_LEVELS, defaultValue: DEFAULT_LOG_LEVEL, required: false
-        input name: "logDescText",  title: "Log Description Text", type: "bool",  defaultValue: false,  required: false
+        input name: "logLevel",    title: "Log Level",            type: "enum", options: LOG_LEVELS, defaultValue: DEFAULT_LOG_LEVEL, required: false
+        input name: "logDescText", title: "Log Description Text", type: "bool", defaultValue: false, required: false
     }
 }
 
-// ── 라이프사이클 ─────────────────────────────────────────────────────────────
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 def installed() {
     logger("debug", "installed()")
@@ -53,27 +66,23 @@ def uninstalled() {
 
 def initialize() {
     logger("debug", "initialize()")
-
-    // master 장치만 MQTT 연결 (core 앱이 첫 번째 장치에 master=true 설정)
+    // Only the master device handles MQTT connection
     if (getDataValue("master") == "true") {
         if (interfaces.mqtt.isConnected())
             interfaces.mqtt.disconnect()
         mqttConnectUntilSuccessful()
     }
-
     refresh()
 }
 
-// ── MQTT (★ 기존 코드에 완전히 누락 → 상태가 로그에만 보이고 UI에 안 보이던 원인) ──
+// ── MQTT ──────────────────────────────────────────────────────────────────────
 
 def mqttConnectUntilSuccessful() {
     logger("debug", "mqttConnectUntilSuccessful()")
     try {
         def mqtt = parent.retrieveMqttDetails()
         interfaces.mqtt.connect(
-            mqtt.server,
-            mqtt.clientId,
-            null, null,
+            mqtt.server, mqtt.clientId, null, null,
             tlsVersion: "1.2",
             privateKey: mqtt.privateKey,
             caCertificate: mqtt.caCertificate,
@@ -121,8 +130,6 @@ def refresh() {
 
 def on() {
     logger("debug", "on()")
-    // ★ parent.sendCommand() → parent.sendDeviceCommand() 로 수정
-    // ★ 페이로드 구조를 ThinQ Connect API 실제 스펙에 맞게 수정
     parent.sendDeviceCommand(getDeviceId(), [
         operation: [ airPurifierOperationMode: "POWER_ON" ]
     ])
@@ -141,8 +148,7 @@ def off() {
 
 def setSpeed(String speed) {
     logger("debug", "setSpeed(${speed})")
-
-    // Hubitat FanControl 표준값 → LG API 값 양방향 매핑
+    // Map Hubitat FanControl standard values to LG API values
     def speedMap = [
         "low"         : "LOW",
         "medium-low"  : "LOW_MID",
@@ -153,52 +159,43 @@ def setSpeed(String speed) {
         "on"          : "AUTO"
     ]
     def apiSpeed = speedMap[speed?.toLowerCase()] ?: speed?.toUpperCase()
-
     parent.sendDeviceCommand(getDeviceId(), [
         airFlow: [ windStrength: apiSpeed ]
     ])
     sendEvent(name: "speed", value: speed)
 }
 
-// ── 상태 파싱 (core 앱 → processStateData(status) 로 호출됨) ─────────────────
+// ── State Parsing ─────────────────────────────────────────────────────────────
 
 def processStateData(data) {
     logger("debug", "processStateData(${data})")
-
     if (!data) return
-    // API 응답이 List로 올 수 있음 (에어컨 드라이버와 동일한 처리)
+    // Handle API responses wrapped in a List
     if (data instanceof List) {
         if (data.isEmpty()) return
         data = data[0]
     }
     if (!(data instanceof Map)) return
 
-    // 1. runState (현재 동작 상태)
-    if (data.runState?.currentState) {
-        sendEvent(name: "currentState", value: data.runState.currentState)
-    }
-
-    // 2. 전원 상태 파싱
+    // 1. Power state
     def opMode = data.operation?.airPurifierOperationMode
     if (opMode != null) {
         def isOn = (opMode == "POWER_ON")
         sendEvent(name: "switch", value: isOn ? "on" : "off")
         if (logDescText) log.info "${device.displayName} switch → ${isOn ? 'on' : 'off'}"
-    } else if (data.airPurifierJobMode?.currentJobMode != null) {
-        // 구형 응답 구조 호환
-        def isOn = (data.airPurifierJobMode.currentJobMode != "POWER_OFF")
-        sendEvent(name: "switch", value: isOn ? "on" : "off")
     }
 
-    // 3. 공기청정 모드
-    if (data.airPurifierJobMode?.currentJobMode != null) {
+    // 2. Run state and job mode
+    if (data.runState?.currentState) {
+        sendEvent(name: "currentState", value: data.runState.currentState)
+    }
+    if (data.airPurifierJobMode?.currentJobMode) {
         sendEvent(name: "airPurifierMode", value: cleanEnumValue(data.airPurifierJobMode.currentJobMode))
     }
 
-    // 4. 팬 속도
+    // 3. Fan speed — map LG API values back to Hubitat FanControl standard values
     if (data.airFlow?.windStrength != null) {
         def windStrength = data.airFlow.windStrength
-        // LG API 값 → Hubitat FanControl 표준값 역매핑
         def hubitatSpeed = [
             "LOW"      : "low",
             "LOW_MID"  : "medium-low",
@@ -207,36 +204,50 @@ def processStateData(data) {
             "HIGH"     : "high",
             "AUTO"     : "auto"
         ][windStrength] ?: windStrength.toLowerCase()
-
         sendEvent(name: "speed",        value: hubitatSpeed)
         sendEvent(name: "airFlowSpeed", value: windStrength)
-        if (logDescText) log.info "${device.displayName} fanSpeed → ${windStrength}"
     }
 
-    // 5. 공기질 센서 (로그 구조 반영: PM1, PM2, PM10, *Level)
+    // 4. Air quality sensors
     if (data.airQualitySensor != null) {
         def s = data.airQualitySensor
-        if (s.PM1      != null) sendEvent(name: "pm1",      value: s.PM1)
-        if (s.PM2      != null) sendEvent(name: "pm25",     value: s.PM2)    // PM2 = PM2.5
-        if (s.PM10     != null) sendEvent(name: "pm10",     value: s.PM10)
-        if (s.PM1Level != null) sendEvent(name: "pm1Level", value: cleanEnumValue(s.PM1Level))
-        if (s.PM2Level != null) sendEvent(name: "pm25Level",value: cleanEnumValue(s.PM2Level))
-        if (s.PM10Level!= null) sendEvent(name: "pm10Level",value: cleanEnumValue(s.PM10Level))
+
+        // Particulate matter readings
+        if (s.PM1  != null) sendEvent(name: "pm1_0", value: s.PM1,  unit: "µg/m³")
+        if (s.PM2  != null) sendEvent(name: "pm2_5", value: s.PM2,  unit: "µg/m³")
+        if (s.PM10 != null) sendEvent(name: "pm10",  value: s.PM10, unit: "µg/m³")
+
+        // Particulate matter level grades
+        if (s.PM1Level  != null) sendEvent(name: "pm1_0Level", value: cleanEnumValue(s.PM1Level))
+        if (s.PM2Level  != null) sendEvent(name: "pm2_5Level", value: cleanEnumValue(s.PM2Level))
+        if (s.PM10Level != null) sendEvent(name: "pm10Level",  value: cleanEnumValue(s.PM10Level))
+
+        // Odor level — LG API uses "oder" (typo for "odor")
+        if (s.oder != null) sendEvent(name: "odor", value: s.oder)
+
+        // Total pollution index
+        if (s.totalPollution != null) sendEvent(name: "totalPollution", value: s.totalPollution)
+
+        // Humidity
+        if (s.humidity != null) sendEvent(name: "humidity", value: s.humidity, unit: "%")
+
+        if (logDescText) log.info "${device.displayName} PM1.0:${s.PM1} PM2.5:${s.PM2} PM10:${s.PM10} odor:${s.oder} total:${s.totalPollution}"
     }
 
-    // 6. 필터 잔여량 (filterInfo 및 구형 filter 키 둘 다 처리)
+    // 5. Filter remaining life — handle both "filterInfo" and legacy "filter" keys
     def filterPct = data.filterInfo?.filterRemainPercent ?: data.filter?.filterRemainPercent
     if (filterPct != null) {
         sendEvent(name: "filterRemainPercent", value: filterPct, unit: "%")
     }
 }
 
-// ── 헬퍼 ──────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 def getDeviceId() {
     return device.deviceNetworkId.replace("thinqconnect:", "")
 }
 
+// Convert SCREAMING_SNAKE_CASE enum values to Title Case for display
 def cleanEnumValue(value) {
     if (value == null) return ""
     return value.toString()
