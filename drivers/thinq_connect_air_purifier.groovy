@@ -3,7 +3,8 @@
  *  Based on jonozzz hubitat-thinqconnect framework
  *
  *  Changes:
- *  - pm1 → pm1_0 / pm25 → pm2_5 (aligned with PM1.0, PM2.5 naming)
+ *  - pm1_0 → pm1.0 / pm2_5 → pm2.5
+ *  - smell level converted from number (1-4) to text (Good/Normal/Bad/Very Bad)
  *  - Added odor, totalPollution, humidity sensors
  *  - Handles LG API typo: "oder" instead of "odor"
  */
@@ -30,11 +31,11 @@ metadata {
         attribute "pm1.0",               "number"   // PM1.0  (API key: PM1)
         attribute "pm2.5",               "number"   // PM2.5  (API key: PM2)
         attribute "pm10",                "number"   // PM10   (API key: PM10)
-        attribute "pm1.0 Level",          "string"
-        attribute "pm2.5 Level",          "string"
-        attribute "pm10 Level",           "string"
+        attribute "pm1.0Level",          "string"
+        attribute "pm2.5Level",          "string"
+        attribute "pm10Level",           "string"
 
-        attribute "smell",                "number"   // Odor level (API key: "oder" - LG typo)
+        attribute "smell",               "string"   // Odor level (API key: "oder" - LG typo)
         attribute "totalPollution",      "number"   // Total pollution index
         attribute "humidity",            "number"   // Humidity
 
@@ -218,12 +219,12 @@ def processStateData(data) {
         if (s.PM10 != null) sendEvent(name: "pm10",  value: s.PM10, unit: "µg/m³")
 
         // Particulate matter level grades
-        if (s.PM1Level  != null) sendEvent(name: "pm1.0 Level", value: cleanEnumValue(s.PM1Level))
-        if (s.PM2Level  != null) sendEvent(name: "pm2.5 Level", value: cleanEnumValue(s.PM2Level))
-        if (s.PM10Level != null) sendEvent(name: "pm10 Level",  value: cleanEnumValue(s.PM10Level))
+        if (s.PM1Level  != null) sendEvent(name: "pm1.0Level", value: cleanEnumValue(s.PM1Level))
+        if (s.PM2Level  != null) sendEvent(name: "pm2.5Level", value: cleanEnumValue(s.PM2Level))
+        if (s.PM10Level != null) sendEvent(name: "pm10Level",  value: cleanEnumValue(s.PM10Level))
 
-        // Odor level — LG API uses "oder" (typo for "odor")
-        if (s.oder != null) sendEvent(name: "smell", value: s.oder)
+        // Smell level — LG API uses "oder" (typo for "odor")
+        if (s.oder != null) sendEvent(name: "smell", value: convertSmellLevel(s.oder))
 
         // Total pollution index
         if (s.totalPollution != null) sendEvent(name: "totalPollution", value: s.totalPollution)
@@ -231,7 +232,7 @@ def processStateData(data) {
         // Humidity
         if (s.humidity != null) sendEvent(name: "humidity", value: s.humidity, unit: "%")
 
-        if (logDescText) log.info "${device.displayName} PM1.0:${s.PM1} PM2.5:${s.PM2} PM10:${s.PM10} odor:${s.oder} total:${s.totalPollution}"
+        if (logDescText) log.info "${device.displayName} PM1.0:${s.PM1} PM2.5:${s.PM2} PM10:${s.PM10} smell:${convertSmellLevel(s.oder)} total:${s.totalPollution}"
     }
 
     // 5. Filter remaining life — handle both "filterInfo" and legacy "filter" keys
@@ -245,6 +246,17 @@ def processStateData(data) {
 
 def getDeviceId() {
     return device.deviceNetworkId.replace("thinqconnect:", "")
+}
+
+// Convert LG API odor number (1-4) to readable label
+def convertSmellLevel(level) {
+    def levelMap = [
+        1: "Good",
+        2: "Normal",
+        3: "Bad",
+        4: "Very Bad"
+    ]
+    return levelMap[level as int] ?: "Unknown (${level})"
 }
 
 // Convert SCREAMING_SNAKE_CASE enum values to Title Case for display
