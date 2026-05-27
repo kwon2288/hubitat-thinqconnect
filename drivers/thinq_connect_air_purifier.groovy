@@ -27,14 +27,14 @@ metadata {
         attribute "airFlowSpeed",        "string"
 
         // ── Air Quality Sensors ───────────────────────────────
-        attribute "pm1_0",               "number"   // PM1.0  (API key: PM1)
-        attribute "pm2_5",               "number"   // PM2.5  (API key: PM2)
+        attribute "pm1.0",               "number"   // PM1.0  (API key: PM1)
+        attribute "pm2.5",               "number"   // PM2.5  (API key: PM2)
         attribute "pm10",                "number"   // PM10   (API key: PM10)
-        attribute "pm1_0Level",          "string"
-        attribute "pm2_5Level",          "string"
-        attribute "pm10Level",           "string"
+        attribute "pm1.0 Level",          "string"
+        attribute "pm2.5 Level",          "string"
+        attribute "pm10 Level",           "string"
 
-        attribute "odor",                "number"   // Odor level (API key: "oder" - LG typo)
+        attribute "smell",                "number"   // Odor level (API key: "oder" - LG typo)
         attribute "totalPollution",      "number"   // Total pollution index
         attribute "humidity",            "number"   // Humidity
 
@@ -213,17 +213,17 @@ def processStateData(data) {
         def s = data.airQualitySensor
 
         // Particulate matter readings
-        if (s.PM1  != null) sendEvent(name: "pm1_0", value: s.PM1,  unit: "µg/m³")
-        if (s.PM2  != null) sendEvent(name: "pm2_5", value: s.PM2,  unit: "µg/m³")
+        if (s.PM1  != null) sendEvent(name: "pm1.0", value: s.PM1,  unit: "µg/m³")
+        if (s.PM2  != null) sendEvent(name: "pm2.5", value: s.PM2,  unit: "µg/m³")
         if (s.PM10 != null) sendEvent(name: "pm10",  value: s.PM10, unit: "µg/m³")
 
         // Particulate matter level grades
-        if (s.PM1Level  != null) sendEvent(name: "pm1_0Level", value: cleanEnumValue(s.PM1Level))
-        if (s.PM2Level  != null) sendEvent(name: "pm2_5Level", value: cleanEnumValue(s.PM2Level))
-        if (s.PM10Level != null) sendEvent(name: "pm10Level",  value: cleanEnumValue(s.PM10Level))
+        if (s.PM1Level  != null) sendEvent(name: "pm1.0 Level", value: cleanEnumValue(s.PM1Level))
+        if (s.PM2Level  != null) sendEvent(name: "pm2.5 Level", value: cleanEnumValue(s.PM2Level))
+        if (s.PM10Level != null) sendEvent(name: "pm10 Level",  value: cleanEnumValue(s.PM10Level))
 
         // Odor level — LG API uses "oder" (typo for "odor")
-        if (s.oder != null) sendEvent(name: "odor", value: s.oder)
+        if (s.oder != null) sendEvent(name: "smell", value: s.oder)
 
         // Total pollution index
         if (s.totalPollution != null) sendEvent(name: "totalPollution", value: s.totalPollution)
