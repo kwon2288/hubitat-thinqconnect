@@ -247,9 +247,19 @@ def convertSecondsToTime(int sec) {
 }
 
 // Convert LG API error codes to readable messages
+// Convert LG API error codes to readable messages
 def convertErrorCode(code) {
     def errorMap = [
-        "NEED_WATER_REPLENISHMENT" : "Empty Water Tank",
+        "NEED_WATER_DRAIN"         : "Drain Tank Full",        // 오수통 가득 참
+        "NEED_WATER_REPLENISHMENT" : "Water Tank Empty",       // 급수통 부족
+        "WATER_LEAKS_ERROR"        : "Water Leakage",
+        "WATER_LEVEL_SENSOR_ERROR" : "Water Level Sensor Error",
+        "DOOR_CLOSE_ERROR"         : "Door Close Error",
+        "DOOR_OPEN_ERROR"          : "Door Open Error",
+        "STEAM_HEAT_ERROR"         : "Steam Heat Error",
+        "TEMPERATURE_SENSOR_ERROR" : "Temperature Sensor Error",
+        "LE_ERROR"                 : "LE Error",
+        "LE2_ERROR"                : "LE2 Error",
         "NO_ERROR"                 : "none"
     ]
     return errorMap[code] ?: cleanEnumValue(code)
