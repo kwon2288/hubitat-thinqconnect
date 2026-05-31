@@ -1,15 +1,29 @@
 /**
  *  ThinQ Connect Styler
- *  jonozzz hubitat-thinqconnect 프레임워크 기반 (thinq_connect_core.groovy 연동)
+ *  Based on jonozzz hubitat-thinqconnect framework (thinq_connect_core.groovy)
  *
- *  API 스펙:
- *  - operation.stylerOperationMode: START | STOP | POWER_OFF (write only)
- *  - runState.currentState: PREHEAT | COOLING | STEAM | RESERVED | INITIAL | ERROR |
- *                            STAY | PAUSE | DRYING | POWER_OFF | STERILIZE | NIGHT_DRY |
- *                            RUNNING | COMPLETE | FOTA | END_COOLING | PRESTEAM | DIAGNOSIS
- *  - timer.remainHour / timer.remainMinute (read only)
+ *  API Spec:
+ *  - operation.stylerOperationMode (write only)
+ *      START | STOP | POWER_OFF | WAKE_UP
+ *
+ *  - runState.currentState (read only)
+ *      POWER_OFF | INITIAL | RUNNING | PAUSE | COMPLETE | ERROR | DIAGNOSIS |
+ *      NIGHT_DRY | RESERVED | PRESTEAM | PREHEAT | STEAM | STAY | COOLING |
+ *      DRYING | END_COOLING | STERILIZE | RUNNING_END | FOTA | SLEEP
+ *
+ *  - timer (read only)
+ *      remainHour | remainMinute | relativeHourToStop |
+ *      relativeMinuteToStop | totalHour | totalMinute
+ *
  *  - remoteControlEnable.remoteControlEnabled (read only, boolean)
- *  - error: e.g. NEED_WATER_REPLENISHMENT
+ *
+ *  - error
+ *      WATER_LEAKS_ERROR        | DOOR_CLOSE_ERROR          | DOOR_OPEN_ERROR      |
+ *      NEED_WATER_DRAIN         | STEAM_HEAT_ERROR          | NEED_WATER_REPLENISHMENT |
+ *      WATER_LEVEL_SENSOR_ERROR | TEMPERATURE_SENSOR_ERROR  | LE_ERROR | LE2_ERROR
+ *
+ *  - notification push
+ *      STYLING_IS_COMPLETE | ERROR_HAS_OCCURRED
  */
 
 import groovy.transform.Field
