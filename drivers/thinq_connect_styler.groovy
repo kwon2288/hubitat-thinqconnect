@@ -53,6 +53,7 @@ metadata {
     }
 
     preferences {
+        input name: "pollInterval", title: "Polling Interval",    type: "enum", options: ["0":"Off", "1":"1 min", "2":"2 min", "5":"5 min", "10":"10 min", "15":"15 min", "30":"30 min"], defaultValue: "5", required: false
         input name: "logLevel",    title: "Log Level",            type: "enum", options: LOG_LEVELS, defaultValue: DEFAULT_LOG_LEVEL, required: false
         input name: "logDescText", title: "Log Description Text", type: "bool", defaultValue: false, required: false
     }
@@ -76,13 +77,13 @@ def uninstalled() {
 
 def initialize() {
     logger("debug", "initialize()")
-
+    unschedule()   // ← 기존 스케줄 초기화
     if (getDataValue("master") == "true") {
         if (interfaces.mqtt.isConnected())
             interfaces.mqtt.disconnect()
         mqttConnectUntilSuccessful()
     }
-
+    schedulePoll() // ← 폴링 스케줄 등록
     refresh()
 }
 
@@ -237,6 +238,26 @@ def processStateData(data) {
 
 }
 
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+
+private schedulePoll() {
+    def interval = settings.pollInterval ?: "5"
+    if (interval == "0") {
+        logger("info", "Polling disabled")
+        return
+    }
+    switch (interval) {
+        case "1":  runEvery1Minute("refresh");   break
+        case "2":  runEvery2Minutes("refresh");  break
+        case "5":  runEvery5Minutes("refresh");  break
+        case "10": runEvery10Minutes("refresh"); break
+        case "15": runEvery15Minutes("refresh"); break
+        case "30": runEvery30Minutes("refresh"); break
+    }
+    logger("info", "Polling scheduled every ${interval} minute(s)")
+}
+
 // ── 헬퍼 ──────────────────────────────────────────────────────────────────────
 
 def getDeviceId() {
@@ -261,7 +282,6 @@ def convertSecondsToTime(int sec) {
 }
 
 // Convert LG API error codes to readable messages
-// Convert LG API error codes to readable messages
 def convertErrorCode(code) {
     def errorMap = [
         "NEED_WATER_DRAIN"         : "Drain Tank Full",        // 오수통 가득 참
@@ -278,7 +298,6 @@ def convertErrorCode(code) {
     ]
     return errorMap[code] ?: cleanEnumValue(code)
 }
-
 
 private logger(level, msg) {
     if (level && msg) {
