@@ -92,6 +92,8 @@ metadata {
         command "unsetStartTimer"
         command "setAbsoluteStart", ["number", "number"]
         command "setAbsoluteStop", ["number", "number"]   // ← 누락된 절대 꺼짐 커맨드
+        command "startAirCleanOnly"   // Air clean without cooling
+		command "stopAirClean"
     }
 
     preferences {
@@ -540,15 +542,44 @@ def setAirConJobMode(mode) {
     parent.sendDeviceCommand(deviceId, command)
 }
 
+/* 
+// Removed: use startAirCleanOnly() / stopAirClean() instead
 def setAirCleanOperationMode(mode) {
     logger("debug", "setAirCleanOperationMode(${mode})")
-    def deviceId = getDeviceId()
+   def deviceId = getDeviceId()
     def command = [
         operation: [
             airCleanOperationMode: mode
         ]
     ]
     parent.sendDeviceCommand(deviceId, command)
+}
+*/
+
+def startAirCleanOnly() {
+    logger("debug", "startAirCleanOnly()")
+    def deviceId = getDeviceId()
+    // Step 1: Turn off AC cooling
+    parent.sendDeviceCommand(deviceId, [
+        operation: [ airConOperationMode: "POWER_OFF" ]
+    ])
+    pauseExecution(1000)
+    // Step 2: Start air clean independently (no compressor, fan + filter only)
+    parent.sendDeviceCommand(deviceId, [
+        operation: [ airCleanOperationMode: "START" ]
+    ])
+    sendEvent(name: "switch",       value: "on")
+    sendEvent(name: "currentJobMode", value: "Air Clean")
+}
+
+def stopAirClean() {
+    logger("debug", "stopAirClean()")
+    def deviceId = getDeviceId()
+    parent.sendDeviceCommand(deviceId, [
+        operation: [ airCleanOperationMode: "STOP" ]
+    ])
+    sendEvent(name: "switch",       value: "off")
+    sendEvent(name: "currentJobMode", value: "")
 }
 
 def setTargetTemperature(temperature) {
