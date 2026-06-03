@@ -240,7 +240,7 @@ def processStateData(data) {
     def isPoweredOff = false
     if (currentState || airConOpModeRaw) {
         def modeText = currentState ?: airConOpModeRaw ?: ""
-        isPoweredOff = (modeText =~ /(?i)power_off|off/)
+		isPoweredOff = modeText?.toUpperCase() in ["POWER_OFF", "OFF"]
         def switchState = isPoweredOff ? 'off' : 'on'
         sendEvent(name: "switch", value: switchState)
         if (logDescText && currentState) {
