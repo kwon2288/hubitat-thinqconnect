@@ -86,11 +86,12 @@ metadata {
         command "setLight", ["string"]
         command "setPowerSave", ["string"]
         command "setTwoSetEnabled", ["string"]
-        command "setDelayStart", [[name:"Set Delay Start", type: "NUMBER", description: "Select Delay Start in minutes"]]
-        command "setDelayStop", [[name:"Set Delay Stop", type: "NUMBER", description: "Select Delay Stop in minutes"]]
+        command "setDelayStart", [[name:"Set Delay Start", type: "NUMBER", description: "Delay Start in hours (e.g. 2 = 2 hours later)"]]
+		command "setDelayStop",  [[name:"Set Delay Stop",  type: "NUMBER", description: "Delay Stop in hours (e.g. 1 = 1 hour later)"]]
         command "unsetStopTimer"
         command "unsetStartTimer"
         command "setAbsoluteStart", ["number", "number"]
+        command "setAbsoluteStop", ["number", "number"]   // ← 누락된 절대 꺼짐 커맨드
     }
 
     preferences {
@@ -719,37 +720,41 @@ def setTwoSetEnabled(enabled) {
     parent.sendDeviceCommand(deviceId, command)
 }
 
-def setDelayStart(minutes) {
-    logger("debug", "setDelayStart(${minutes})")
-    def deviceId = getDeviceId()
-    def command = [
-        timer: [
-            relativeHourToStart: minutes.intdiv(60),
-            relativeMinuteToStart: minutes % 60
-        ]
-    ]
-    parent.sendDeviceCommand(deviceId, command)
-}
-
-def setDelayStop(minutes) {
-    logger("debug", "setDelayStop(${minutes})")
-    def deviceId = getDeviceId()
-    def command = [
-        timer: [
-            relativeHourToStop: minutes.intdiv(60),
-            relativeMinuteToStop: minutes % 60
-        ]
-    ]
-    parent.sendDeviceCommand(deviceId, command)
-}
-
 def unsetStopTimer() {
     logger("debug", "unsetStopTimer()")
     def deviceId = getDeviceId()
     def command = [
         timer: [
-            relativeHourToStop: 0,
+            relativeHourToStop  : 0,
             relativeMinuteToStop: 0
+        ]
+    ]
+    parent.sendDeviceCommand(deviceId, command)
+    // Clear local attributes
+    sendEvent(name: "relativeHourToStop",   value: 0)
+    sendEvent(name: "relativeMinuteToStop", value: 0)
+}
+
+
+def setDelayStop(hours) {
+    logger("debug", "setDelayStop(${hours})")
+    def deviceId = getDeviceId()
+    def command = [
+        timer: [
+            relativeHourToStop  : hours as int,
+            relativeMinuteToStop: 0              // API spec: must always be 0
+        ]
+    ]
+    parent.sendDeviceCommand(deviceId, command)
+}
+
+def setDelayStart(hours) {
+    logger("debug", "setDelayStart(${hours})")
+    def deviceId = getDeviceId()
+    def command = [
+        timer: [
+            relativeHourToStart  : hours as int,
+            relativeMinuteToStart: 0              // API spec: must always be 0
         ]
     ]
     parent.sendDeviceCommand(deviceId, command)
@@ -778,6 +783,19 @@ def setAbsoluteStart(hour, minute) {
     ]
     parent.sendDeviceCommand(deviceId, command)
 }
+
+def setAbsoluteStop(hour, minute) {
+    logger("debug", "setAbsoluteStop(${hour}, ${minute})")
+    def deviceId = getDeviceId()
+    def command = [
+        timer: [
+            absoluteHourToStop  : hour as int,
+            absoluteMinuteToStop: minute as int
+        ]
+    ]
+    parent.sendDeviceCommand(deviceId, command)
+}
+
 
 // ── Thermostat mode helpers ──────────────────────────────────────────────────
 
