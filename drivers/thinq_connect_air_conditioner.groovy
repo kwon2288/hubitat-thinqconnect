@@ -238,6 +238,7 @@ def processStateData(data) {
         sendEvent(name: "airConOperationMode", value: opMode)
     }
 
+/*
     // Derive switch state from runState or operation mode
     def isPoweredOff = false
     if (currentState || airConOpModeRaw) {
@@ -249,7 +250,22 @@ def processStateData(data) {
             log.info "${device.displayName} CurrentState: ${currentState}, Switch: ${switchState}"
         }
     }
-
+*/
+    // Derive switch state from airConOperationMode first (most reliable),
+    // fall back to currentState only if operation mode is unavailable
+    def switchState = "off"
+    if (airConOpModeRaw != null) {
+    	// airConOperationMode is the authoritative source for power state
+    	switchState = (airConOpModeRaw == "POWER_ON") ? "on" : "off"
+    } else if (currentState != null) {
+    	// Fallback: derive from currentState
+    	switchState = (currentState in ["POWER_OFF", "OFF"]) ? "off" : "on"
+    }
+    sendEvent(name: "switch", value: switchState)
+    if (logDescText) {
+    	log.info "${device.displayName} opMode: ${airConOpModeRaw}, currentState: ${currentState}, Switch: ${switchState}"
+    }
+    
     // Derive thermostatMode from job mode + power state
     def thermostatMode = lgJobModeToThermostatMode(currentJobModeRaw, isPoweredOff)
     sendEvent(name: "thermostatMode", value: thermostatMode)
