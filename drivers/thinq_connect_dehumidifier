@@ -6,7 +6,7 @@
  *  - operation.dehumidifierOperationMode (read/write)
  *      POWER_ON | POWER_OFF
  *
- *  - dehumidifierJobMode.currentJobMode (read only)
+ *  - dehumidifierJobMode.currentJobMode (read only per spec, but may work on some models)
  *      RAPID_HUMIDITY | CLOTHES_DRY | AIR_CLEAN |
  *      QUIET_HUMIDITY | SMART_HUMIDITY | INTENSIVE_DRY
  *
@@ -34,9 +34,12 @@ metadata {
         capability "FanControl"
         capability "RelativeHumidityMeasurement"
 
-        attribute "dehumidifierMode",    "string"
-        attribute "airFlowSpeed",        "string"
-        attribute "waterFull",           "string"
+        attribute "dehumidifierMode", "string"
+        attribute "airFlowSpeed",     "string"
+        attribute "waterFull",        "string"
+
+        command "setDehumidifierMode", [[name:"mode", type:"ENUM",
+            constraints:["RAPID_HUMIDITY","CLOTHES_DRY","AIR_CLEAN","QUIET_HUMIDITY","SMART_HUMIDITY","INTENSIVE_DRY"]]]
     }
 
     preferences {
@@ -155,7 +158,7 @@ def on() {
     parent.sendDeviceCommand(getDeviceId(), [
         operation: [ dehumidifierOperationMode: "POWER_ON" ]
     ])
-    sendEvent(name: "switch",   value: "on")
+    sendEvent(name: "switch",    value: "on")
     sendEvent(name: "waterFull", value: "ok")
 }
 
@@ -186,6 +189,18 @@ def setSpeed(String speed) {
     sendEvent(name: "airFlowSpeed", value: apiSpeed)
 }
 
+// ── Dehumidifier Mode ─────────────────────────────────────────────────────────
+
+def setDehumidifierMode(mode) {
+    logger("debug", "setDehumidifierMode(${mode})")
+    // Note: API spec marks currentJobMode as read-only,
+    // but some models accept write commands
+    parent.sendDeviceCommand(getDeviceId(), [
+        dehumidifierJobMode: [ currentJobMode: mode ]
+    ])
+    sendEvent(name: "dehumidifierMode", value: cleanEnumValue(mode))
+}
+
 // ── State Parsing ─────────────────────────────────────────────────────────────
 
 def processStateData(data) {
@@ -212,14 +227,14 @@ def processStateData(data) {
         runIn(5, "refresh")
     }
 
-    // 2. Job mode (read only)
+    // 2. Job mode (read only per spec)
     if (data.dehumidifierJobMode?.currentJobMode != null) {
         sendEvent(name: "dehumidifierMode",
                   value: cleanEnumValue(data.dehumidifierJobMode.currentJobMode))
         if (logDescText) log.info "${device.displayName} mode → ${data.dehumidifierJobMode.currentJobMode}"
     }
 
-    // 3. Fan speed
+    // 3. Fan speed — map LG API values back to Hubitat FanControl standard values
     if (data.airFlow?.windStrength != null) {
         def windStrength = data.airFlow.windStrength
         def hubitatSpeed = [ "LOW": "low", "HIGH": "high" ][windStrength] ?: windStrength.toLowerCase()
@@ -227,7 +242,7 @@ def processStateData(data) {
         sendEvent(name: "airFlowSpeed", value: windStrength)
     }
 
-    // 4. Current humidity
+    // 4. Current humidity — mapped to RelativeHumidityMeasurement capability
     if (data.humidity?.currentHumidity != null) {
         sendEvent(name: "humidity", value: data.humidity.currentHumidity, unit: "%")
         if (logDescText) log.info "${device.displayName} humidity → ${data.humidity.currentHumidity}%"
@@ -241,7 +256,6 @@ def processStateData(data) {
         // Dehumidifier auto-stops when tank is full; refresh to confirm power state
         runIn(5, "refresh")
     } else if (opMode == "POWER_OFF") {
-        // When powered off, check if water tank caused it
         sendEvent(name: "waterFull", value: "unknown")
     } else if (opMode == "POWER_ON") {
         sendEvent(name: "waterFull", value: "ok")
